@@ -540,6 +540,20 @@ func (container *Container) KillSig(sig int) error {
 	return container.daemon.Kill(container, sig)
 }
 
+func (container *Container) Pause() error {
+	if !container.State.IsRunning() {
+		return nil
+	}
+        return container.daemon.Pause(container)
+}
+
+func (container *Container) Unpause() error {
+	if !container.State.IsRunning() {
+		return nil
+	}
+        return container.daemon.Unpause(container)
+}
+
 func (container *Container) Kill() error {
 	if !container.State.IsRunning() {
 		return nil

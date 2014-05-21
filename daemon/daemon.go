@@ -972,6 +972,14 @@ func (daemon *Daemon) Run(c *Container, pipes *execdriver.Pipes, startCallback e
 	return daemon.execDriver.Run(c.command, pipes, startCallback)
 }
 
+func (daemon *Daemon) Pause(c *Container) error {
+	return daemon.execDriver.Pause(c.ID)
+}
+
+func (daemon *Daemon) Unpause(c *Container) error {
+	return daemon.execDriver.Unpause(c.ID)
+}
+
 func (daemon *Daemon) Kill(c *Container, sig int) error {
 	return daemon.execDriver.Kill(c.command, sig)
 }

@@ -208,6 +208,14 @@ func (d *driver) Kill(c *execdriver.Command, sig int) error {
 	return KillLxc(c.ID, sig)
 }
 
+func (d *driver) Pause(id string) error {
+        return nil
+}
+
+func (d *driver) Unpause(id string) error {
+        return nil
+}
+
 func (d *driver) Terminate(c *execdriver.Command) error {
 	return KillLxc(c.ID, 9)
 }

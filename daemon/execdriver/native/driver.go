@@ -142,6 +142,16 @@ func (d *driver) Kill(p *execdriver.Command, sig int) error {
 	return syscall.Kill(p.Process.Pid, syscall.Signal(sig))
 }
 
+func (d *driver) Pause(id string) error {
+	container := d.activeContainers(id)
+	container.Cgroups.Freezer = "FROZEN"
+}
+
+func (d *driver) Unpause(id string) error {
+	container := d.activeContainers(id)
+	container.Cgroups.Freezer = "THAWED"
+}
+
 func (d *driver) Terminate(p *execdriver.Command) error {
 	// lets check the start time for the process
 	started, err := d.readStartTime(p)
