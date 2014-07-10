@@ -224,7 +224,7 @@ func (r *Registry) LookupRemoteImage(imgID, registry string, token []string) boo
 }
 
 // Retrieve an image from the Registry.
-func (r *Registry) GetRemoteImageJSON(imgID, registry string, token []string) ([]byte, int, error) {
+func (r *Registry) GetRemoteImageJSON(imgID, registry string, token []string) ([]byte, int, string, error) {
 	// Get the JSON
 	req, err := r.reqFactory.NewRequest("GET", registry+"images/"+imgID+"/json", nil)
 	if err != nil {
@@ -245,7 +245,16 @@ func (r *Registry) GetRemoteImageJSON(imgID, registry string, token []string) ([
 	if hdr := res.Header.Get("X-Docker-Size"); hdr != "" {
 		imageSize, err = strconv.Atoi(hdr)
 		if err != nil {
-			return nil, -1, err
+			return nil, -1, "", err
+		}
+	}
+
+	// if the checksum header is not present, then set it to '-1'
+	imageChksum := ""
+	if hdr := res.Header.Get("X-Docker-Checksum"); hdr != "" {
+		imageChksum err = hdr
+		if err != nil {
+			return nil, -1, "", err
 		}
 	}
 
@@ -253,7 +262,7 @@ func (r *Registry) GetRemoteImageJSON(imgID, registry string, token []string) ([
 	if err != nil {
 		return nil, -1, fmt.Errorf("Failed to parse downloaded json: %s (%s)", err, jsonString)
 	}
-	return jsonString, imageSize, nil
+	return jsonString, imageSize, imageChksum, nil
 }
 
 func (r *Registry) GetRemoteImageLayer(imgID, registry string, token []string, imgSize int64) (io.ReadCloser, error) {

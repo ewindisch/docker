@@ -609,6 +609,18 @@ func (srv *Server) recursiveLoad(eng *engine.Engine, address, tmpImageDir string
 			utils.Debugf("Error unmarshalling json", err)
 			return err
 		}
+
+		// We must verify checksums to prevent layer tampering
+		tarsumLayer := &utils.TarSum{Reader: layer}
+		h := sha256.New()
+		h.Write(imageJson)
+		h.Write([]byte{'\n'})
+		checksumLayer := &utils.CheckSum{Reader: tarsumLayer, Hash: h}
+
+		if checksumLayer.Sum() != address {
+		    return fmt.Errorf("Image checksum does not match %s", address)
+		}
+
 		if img.Parent != "" {
 			if !srv.daemon.Graph().Exists(img.Parent) {
 				if err := srv.recursiveLoad(eng, img.Parent, tmpImageDir); err != nil {
@@ -1105,7 +1117,7 @@ func (srv *Server) pullImage(r *registry.Registry, out io.Writer, imgID, endpoin
 			)
 			retries := 5
 			for j := 1; j <= retries; j++ {
-				imgJSON, imgSize, err = r.GetRemoteImageJSON(id, endpoint, token)
+				imgJSON, imgSize, imgChksum, err = r.GetRemoteImageJSON(id, endpoint, token)
 				if err != nil && j == retries {
 					out.Write(sf.FormatProgress(utils.TruncateID(id), "Error pulling dependent layers", nil))
 					return err
@@ -1145,9 +1157,19 @@ func (srv *Server) pullImage(r *registry.Registry, out io.Writer, imgID, endpoin
 				}
 				defer layer.Close()
 
-				err = srv.daemon.Graph().Register(imgJSON,
-					utils.ProgressReader(layer, imgSize, out, sf, false, utils.TruncateID(id), "Downloading"),
-					img)
+				// We must verify checksums to prevent layer tampering
+				layerpgr := utils.ProgressReader(layer, imgSize, out, sf, false, utils.TruncateID(id), "Downloading")
+				tarsumLayer := &utils.TarSum{Reader: layerpgr}
+				h := sha256.New()
+				h.Write(imageJson)
+				h.Write([]byte{'\n'})
+				checksumLayer := &utils.CheckSum{Reader: tarsumLayer, Hash: h}
+
+				if checksumLayer.Sum() != imgChksum {
+				    return fmt.Errorf("Image checksum does not match %s", address)
+				}
+
+				err = srv.daemon.Graph().Register(imgJSON, checksumLayer, img)
 				if terr, ok := err.(net.Error); ok && terr.Timeout() && j < retries {
 					time.Sleep(time.Duration(j) * 500 * time.Millisecond)
 					continue
