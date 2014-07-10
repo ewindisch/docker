@@ -12,6 +12,7 @@ import (
 	"github.com/docker/docker/image"
 	"github.com/docker/docker/pkg/log"
 	"github.com/docker/docker/registry"
+	"github.com/docker/docker/pkg/tarsum"
 	"github.com/docker/docker/utils"
 )
 
@@ -235,12 +236,13 @@ func (s *TagStore) pullImage(r *registry.Session, out io.Writer, imgID, endpoint
 			var (
 				imgJSON []byte
 				imgSize int
+				imgChksum string
 				err     error
 				img     *image.Image
 			)
 			retries := 5
 			for j := 1; j <= retries; j++ {
-				imgJSON, imgSize, err = r.GetRemoteImageJSON(id, endpoint, token)
+				imgJSON, imgSize, imgChksum, err = r.GetRemoteImageJSON(id, endpoint, token)
 				if err != nil && j == retries {
 					out.Write(sf.FormatProgress(utils.TruncateID(id), "Error pulling dependent layers", nil))
 					return err
@@ -280,9 +282,11 @@ func (s *TagStore) pullImage(r *registry.Session, out io.Writer, imgID, endpoint
 				}
 				defer layer.Close()
 
-				err = s.graph.Register(imgJSON,
-					utils.ProgressReader(layer, imgSize, out, sf, false, utils.TruncateID(id), "Downloading"),
-					img)
+				layerpgr := utils.ProgressReader(layer, imgSize, out, sf, false, utils.TruncateID(id), "Downloading")
+				tarsumLayer := &tarsum.TarSum{Reader: layerpgr}
+				tarsumchkLayer := &tarsum.TarSumChkReader{Ts: tarsumLayer, Comparator: imgChksum, Extra: imgJSON}
+
+				err = s.graph.Register(imgJSON, tarsumchkLayer, img)
 				if terr, ok := err.(net.Error); ok && terr.Timeout() && j < retries {
 					time.Sleep(time.Duration(j) * 500 * time.Millisecond)
 					continue

@@ -5,6 +5,7 @@ import (
 	"compress/gzip"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"hash"
 	"io"
 	"sort"
@@ -15,6 +16,8 @@ import (
 
 	"github.com/docker/docker/pkg/log"
 )
+
+var ErrChecksum = errors.New("Error verifying checksum")
 
 type TarSum struct {
 	io.Reader
@@ -29,6 +32,12 @@ type TarSum struct {
 	finished           bool
 	first              bool
 	DisableCompression bool
+}
+
+type TarSumChkReader struct {
+	Ts *TarSum
+	Comparator string
+	Extra []byte
 }
 
 type writeCloseFlusher interface {
@@ -181,4 +190,12 @@ func (ts *TarSum) Sum(extra []byte) string {
 
 func (ts *TarSum) GetSums() map[string]string {
 	return ts.sums
+}
+
+func (tscr *TarSumChkReader) Read(buf []byte) (int, error) {
+	i, err := tscr.Ts.Read(buf)
+	if err == io.EOF && tscr.Ts.Sum(tscr.Extra) != tscr.Comparator {
+		err = ErrChecksum
+	}
+	return i, err
 }

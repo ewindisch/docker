@@ -194,6 +194,7 @@ func handlerGetImage(w http.ResponseWriter, r *http.Request) {
 	writeHeaders(w)
 	layer_size := len(layer["layer"])
 	w.Header().Add("X-Docker-Size", strconv.Itoa(layer_size))
+	w.Header().Add("X-Docker-Payload-Checksum", layer["checksum_tarsum"])
 	io.WriteString(w, layer[vars["action"]])
 }
 
@@ -213,7 +214,7 @@ func handlerPutImage(w http.ResponseWriter, r *http.Request) {
 		layer = make(map[string]string)
 		testLayers[image_id] = layer
 	}
-	if checksum := r.Header.Get("X-Docker-Checksum"); checksum != "" {
+	if checksum := r.Header.Get("X-Docker-Payload-Checksum"); checksum != "" {
 		if checksum != layer["checksum_simple"] && checksum != layer["checksum_tarsum"] {
 			apiError(w, "Wrong checksum", 400)
 			return
