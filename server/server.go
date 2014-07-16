@@ -616,7 +616,7 @@ func (srv *Server) recursiveLoad(eng *engine.Engine, address, tmpImageDir string
 				}
 			}
 		}
-		if err := srv.daemon.Graph().Register(imageJson, layer, img); err != nil {
+		if err := srv.daemon.Graph().Register(imageJson, layer, img, address); err != nil {
 			return err
 		}
 	}
@@ -1147,7 +1147,7 @@ func (srv *Server) pullImage(r *registry.Registry, out io.Writer, imgID, endpoin
 
 				err = srv.daemon.Graph().Register(imgJSON,
 					utils.ProgressReader(layer, imgSize, out, sf, false, utils.TruncateID(id), "Downloading"),
-					img)
+					img, checksum)
 				if terr, ok := err.(net.Error); ok && terr.Timeout() && j < retries {
 					time.Sleep(time.Duration(j) * 500 * time.Millisecond)
 					continue

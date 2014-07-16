@@ -133,8 +133,12 @@ func (graph *Graph) Get(name string) (*image.Image, error) {
 
 // Create creates a new image and registers it in the graph.
 func (graph *Graph) Create(layerData archive.ArchiveReader, containerID, containerImage, comment, author string, containerConfig, config *runconfig.Config) (*image.Image, error) {
+  /* Old versions of the image format contained an ID field.
+	   this has been removed as the ID is now the sha256 of
+		 the archive tar and the JSON (the JSON generated from the
+		 output of the following image.Image object) */
 	img := &image.Image{
-		ID:            utils.GenerateRandomID(),
+		//ID:            utils.GenerateRandomID(),
 		Comment:       comment,
 		Created:       time.Now().UTC(),
 		DockerVersion: dockerversion.VERSION,
@@ -150,7 +154,7 @@ func (graph *Graph) Create(layerData archive.ArchiveReader, containerID, contain
 		img.ContainerConfig = *containerConfig
 	}
 
-	if err := graph.Register(nil, layerData, img); err != nil {
+	if err := graph.Register(nil, layerData, img, nil); err != nil {
 		return nil, err
 	}
 	return img, nil
@@ -158,27 +162,43 @@ func (graph *Graph) Create(layerData archive.ArchiveReader, containerID, contain
 
 // Register imports a pre-existing image into the graph.
 // FIXME: pass img as first argument
-func (graph *Graph) Register(jsonData []byte, layerData archive.ArchiveReader, img *image.Image) (err error) {
+func (graph *Graph) Register(jsonData []byte, layerData archive.ArchiveReader, img *image.Image, checksum string) (err error) {
 	defer func() {
 		// If any error occurs, remove the new dir from the driver.
 		// Don't check for errors since the dir might not have been created.
 		// FIXME: this leaves a possible race condition.
 		if err != nil {
-			graph.driver.Remove(img.ID)
+			graph.driver.Remove(imgID)
 		}
 	}()
-	if err := utils.ValidateID(img.ID); err != nil {
-		return err
+
+	/* Generate ID from checksum */
+	if jsonData == nil {
+		jsonData = json.Marshal(img)
 	}
+	tarsumLayer := &utils.TarSum{Reader: layerData}
+	h := sha256.New()
+	h.Write(jsonData)
+	h.Write([]byte{'\n'})
+	checksumLayer := &utils.CheckSum{Reader: tarsumLayer, Hash: h}
+	imgID := checksumLayer.Sum()
+	/* We could simply assume that all checksums are the ID and are thus valid,
+	   but legacy versions of Docker had used random IDs. As such, we support
+		 blind trust of the registry in providing images with arbitrary IDs. */
+	if checksum != nil && imgID != checksum {
+		return fmt.Errorf("Checksum invalid for image %s", imgID)
+	}
+	//TODO(ewindisch): remove utils.ValidateID
+
 	// (This is a convenience to save time. Race conditions are taken care of by os.Rename)
-	if graph.Exists(img.ID) {
-		return fmt.Errorf("Image %s already exists", img.ID)
+	if graph.Exists(imgID) {
+		return fmt.Errorf("Image %s already exists", imgID)
 	}
 
 	// Ensure that the image root does not exist on the filesystem
 	// when it is not registered in the graph.
 	// This is common when you switch from one graph driver to another
-	if err := os.RemoveAll(graph.ImageRoot(img.ID)); err != nil && !os.IsNotExist(err) {
+	if err := os.RemoveAll(graph.ImageRoot(imgID)); err != nil && !os.IsNotExist(err) {
 		return err
 	}
 
@@ -186,7 +206,7 @@ func (graph *Graph) Register(jsonData []byte, layerData archive.ArchiveReader, i
 	// (the graph is the source of truth).
 	// Ignore errors, since we don't know if the driver correctly returns ErrNotExist.
 	// (FIXME: make that mandatory for drivers).
-	graph.driver.Remove(img.ID)
+	graph.driver.Remove(imgID)
 
 	tmp, err := graph.Mktemp("")
 	defer os.RemoveAll(tmp)
@@ -195,24 +215,24 @@ func (graph *Graph) Register(jsonData []byte, layerData archive.ArchiveReader, i
 	}
 
 	// Create root filesystem in the driver
-	if err := graph.driver.Create(img.ID, img.Parent); err != nil {
-		return fmt.Errorf("Driver %s failed to create image rootfs %s: %s", graph.driver, img.ID, err)
+	if err := graph.driver.Create(imgID, img.Parent); err != nil {
+		return fmt.Errorf("Driver %s failed to create image rootfs %s: %s", graph.driver, imgID, err)
 	}
 	// Mount the root filesystem so we can apply the diff/layer
-	rootfs, err := graph.driver.Get(img.ID, "")
+	rootfs, err := graph.driver.Get(imgID, "")
 	if err != nil {
-		return fmt.Errorf("Driver %s failed to get image rootfs %s: %s", graph.driver, img.ID, err)
+		return fmt.Errorf("Driver %s failed to get image rootfs %s: %s", graph.driver, imgID, err)
 	}
-	defer graph.driver.Put(img.ID)
+	defer graph.driver.Put(imgID)
 	img.SetGraph(graph)
 	if err := image.StoreImage(img, jsonData, layerData, tmp, rootfs); err != nil {
 		return err
 	}
 	// Commit
-	if err := os.Rename(tmp, graph.ImageRoot(img.ID)); err != nil {
+	if err := os.Rename(tmp, graph.ImageRoot(imgID)); err != nil {
 		return err
 	}
-	graph.idIndex.Add(img.ID)
+	graph.idIndex.Add(imgID)
 	return nil
 }
 
