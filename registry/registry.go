@@ -214,6 +214,12 @@ func validateRepositoryName(repositoryName string) error {
 		namespace string
 		name      string
 	)
+
+	// Strip off the http/https prefix from repository name checks
+	if strings.HasPrefix(repositoryName, "https://") || strings.HasPrefix(repositoryName, "http://") {
+		repositoryName = strings.SplitN(repositoryName, "/", 3)[2]
+	}
+
 	nameParts := strings.SplitN(repositoryName, "/", 2)
 	if len(nameParts) < 2 {
 		namespace = "library"
@@ -275,12 +281,7 @@ func ExpandAndVerifyRegistryUrl(hostname string) (string, error) {
 	}
 	endpoint := fmt.Sprintf("https://%s/v1/", hostname)
 	if _, err := pingRegistryEndpoint(endpoint); err != nil {
-		log.Debugf("Registry %s does not work (%s), falling back to http", endpoint, err)
-		endpoint = fmt.Sprintf("http://%s/v1/", hostname)
-		if _, err = pingRegistryEndpoint(endpoint); err != nil {
-			//TODO: triggering highland build can be done there without "failing"
-			return "", errors.New("Invalid Registry endpoint: " + err.Error())
-		}
+		return "", errors.New("Cannot contact registry endpoint: " + err.Error())
 	}
 	return endpoint, nil
 }
