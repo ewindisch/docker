@@ -69,6 +69,7 @@ func mainDaemon() {
 	job.Setenv("Version", dockerversion.VERSION)
 	job.Setenv("SocketGroup", *flSocketGroup)
 
+	job.SetenvBool("InsecureRegistry", *flInsecureRegistry)
 	job.SetenvBool("Tls", *flTls)
 	job.SetenvBool("TlsVerify", *flTlsVerify)
 	job.Setenv("TlsCa", *flCa)

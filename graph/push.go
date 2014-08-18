@@ -214,7 +214,7 @@ func (s *TagStore) CmdPush(job *engine.Job) engine.Status {
 		return job.Error(err)
 	}
 
-	endpoint, err := registry.ExpandAndVerifyRegistryUrl(hostname)
+	endpoint, err := registry.ExpandAndVerifyRegistryUrl(hostname, job.GetenvBool("InsecureRegistry"))
 	if err != nil {
 		return job.Error(err)
 	}
