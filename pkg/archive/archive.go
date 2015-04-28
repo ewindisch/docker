@@ -657,6 +657,75 @@ func CopyWithTar(src, dst string) error {
 	return defaultArchiver.CopyWithTar(src, dst)
 }
 
+/* Unpacks to a Tar stream */
+func UnpackTarStream(decompressedArchive io.Reader, dest string, options *TarOptions) (io.ReadCloser, error) {
+	tarStreamReader, tarStreamWriter := io.Pipe()
+	bufW := bufio.NewWriter(tarStreamWriter)
+	
+	tr := tar.NewReader(decompressedArchive)
+	//tw := tar.NewWriter(tarStreamWriter)
+	tw := tar.NewWriter(bufW)
+
+	trBuf := pools.BufioReader32KPool.Get(nil)
+	defer pools.BufioReader32KPool.Put(trBuf)
+
+	// Iterate through the files in the archive.
+	//loop:
+	for {
+		hdr, err := tr.Next()
+		if err == io.EOF {
+			// end of tar archive
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
+		hdr.Name = filepath.Clean(filepath.Join(dest, hdr.Name))
+		logrus.Debugf("UnpackTarStream: setting header name to %s", hdr.Name)
+
+		tw.WriteHeader(hdr)
+
+		logrus.Debugf("UnpackTarStream: performing io.Copy")
+		if _, err = io.Copy(tw, tr); err != nil {
+			return nil, err
+		}
+
+		logrus.Debugf("UnpackTarStream: flush")
+		bufW.Flush()
+
+		logrus.Debugf("UnpackTarStream: loop")
+	}
+	logrus.Debugf("UnpackTarStream: return")
+	return tarStreamReader, nil
+	//return bufRW, nil
+}
+
+// Decompresses a file to a tarstream, rebasing to destination.
+func (archiver *Archiver) UntarTar(archive io.Reader, dest string, options *TarOptions) (io.ReadCloser, error) {
+	if archive == nil {
+		return nil, fmt.Errorf("Empty archive")
+	}
+	dest = filepath.Clean(dest)
+	if options == nil {
+		options = &TarOptions{}
+	}
+	if options.ExcludePatterns == nil {
+		options.ExcludePatterns = []string{}
+	}
+	decompressedArchive, err := DecompressStream(archive)
+	if err != nil {
+		return nil, err
+	}
+	defer decompressedArchive.Close()
+	return UnpackTarStream(decompressedArchive, dest, options)
+}
+
+// UntarTar is a convenience function which calls Untar and Tar, with the output of one piped into the other.
+// If either Tar or Untar fails, UntarTar aborts and returns the error.
+func UntarTar(src io.Reader, dst string, options *TarOptions) (io.ReadCloser, error) {
+	return defaultArchiver.UntarTar(src, dst, options)
+}
+
 func (archiver *Archiver) CopyFileWithTar(src, dst string) (err error) {
 	logrus.Debugf("CopyFileWithTar(%s, %s)", src, dst)
 	srcSt, err := os.Stat(src)
