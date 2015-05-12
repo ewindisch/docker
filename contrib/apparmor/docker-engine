@@ -1,0 +1,94 @@
+profile /usr/bin/docker flags=(attach_disconnected) {
+  # Prevent following links to these files during container setup.
+  deny /etc/** mkl,
+  deny /dev/** kl,
+  deny /sys/** mkl,
+  deny /proc/** mkl,
+
+  mount -> /var/lib/docker/**,
+  mount -> /,
+  mount -> /proc/**,
+  mount -> /sys/**,
+  umount,
+  pivot_root,
+  signal (receive) peer=@{profile_name},
+  signal (receive) peer=unconfined,
+  signal (send),
+  ipc rw,
+  network,
+  capability,
+  file,
+
+  /etc/apparmor.d/docker rw,
+  /var/lib/docker/tmp/** rw,
+  /var/run/docker.sock rw,
+  /var/lib/docker/** rwklm,
+  /dev/** rw,
+  owner /** rw,
+
+  /sbin/apparmor_parser rCix,
+  /sbin/xtables-multi rCix,
+  /sbin/iptables rCx,
+  /sbin/modprobe rCx,
+  /usr/bin/docker rcx,
+  /sbin/auplink rCx,
+  /usr/bin/xz rCx,
+
+  # Transitions
+  change_profile -> docker-*,
+  change_profile -> unconfined,
+
+  # Applied to reexec
+  profile /usr/bin/docker flags=(attach_disconnected) {
+   deny /proc/* rw,
+   deny /proc/sys/** w,
+   deny /sys/** rw,
+
+   signal (receive) peer=@{profile_name},
+   signal (receive) peer=/usr/bin/docker,
+   network,
+   file,
+   mount -> /,
+   umount,
+
+   /usr/bin/docker rix,
+
+   capability chown,
+   capability fowner,
+   capability sys_chroot,
+   capability net_admin,
+   capability net_bind_service,
+   capability dac_override,
+  }
+  profile /sbin/iptables {
+   signal (receive) peer=/usr/bin/docker,
+   capability net_admin,
+  }
+  profile /sbin/auplink flags=(audit,attach_disconnected) {
+   signal (receive) peer=/usr/bin/docker,
+   capability sys_admin,
+   /var/lib/docker/aufs/** rw,
+   /lib/** r,
+   /apparmor/.null r,
+   /dev/null rw,
+   /etc/ld.so.cache r,
+   /sbin/auplink rm,
+   /proc/[0-9]*/mounts rw,
+  }
+  profile /sbin/modprobe {
+   signal (receive) peer=/usr/bin/docker,
+   capability sys_module,
+   file,
+  }
+  # xz works via pipes, so we do not need access to the filesystem.
+  profile /usr/bin/xz {
+   signal (receive) peer=/usr/bin/docker,
+  }
+
+  # Client requirements...
+  /var/run/docker.sock rw,
+  /proc/sys/net/core/somaxconn r,
+  /proc/sys/kernel/cap_last_cap r,
+  /run/docker.sock rw,
+  owner /** rw,
+}
