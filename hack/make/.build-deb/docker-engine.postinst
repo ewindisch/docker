@@ -8,6 +8,11 @@ case "$1" in
 				groupadd --system docker
 			fi
 		fi
+
+		ucf /usr/share/docker-engine/etc/apparmor.d/docker \
+			/etc/apparmor.d/docker
+		ucf /usr/share/docker-engine/etc/apparmor.d/docker-engine \
+			/etc/apparmor.d/docker-engine
 		;;
 	abort-*)
 		# How'd we get here??

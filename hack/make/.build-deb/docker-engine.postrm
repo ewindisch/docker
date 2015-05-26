@@ -1,0 +1,5 @@
+#!/bin/sh
+set -e
+
+ucf --purge /etc/apparmor.d/docker || true
+ucf --purge /etc/apparmor.d/docker-engine || true
