@@ -8,6 +8,8 @@ case "$1" in
 				groupadd --system docker
 			fi
 		fi
+
+		dh_apparmor docker
 		;;
 	abort-*)
 		# How'd we get here??

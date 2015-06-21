@@ -45,6 +45,9 @@ all: build
 binary: build
 	$(DOCKER_RUN_DOCKER) hack/make.sh binary
 
+packages: build
+	$(DOCKER_RUN_DOCKER) hack/make.sh binary packages
+
 cross: build
 	$(DOCKER_RUN_DOCKER) hack/make.sh binary cross
 
