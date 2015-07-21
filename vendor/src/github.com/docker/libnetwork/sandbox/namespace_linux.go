@@ -183,16 +183,15 @@ func createNetworkNamespace(path string, osCreate bool) error {
 		return err
 	}
 
-	cmd := &exec.Cmd{
-		Path:   reexec.Self(),
-		Args:   append([]string{"netns-create"}, path),
-		Stdout: os.Stdout,
-		Stderr: os.Stderr,
-	}
 	if osCreate {
-		cmd.SysProcAttr = &syscall.SysProcAttr{}
-		cmd.SysProcAttr.Cloneflags = syscall.CLONE_NEWNET
+		Cloneflags := syscall.CLONE_NEWNET
 	}
+	reexec.Command(&reexec.CommandOptions{
+		Cloneflags: Cloneflags,
+	},
+		append([]string{"netns-create"}, path),
+	)
+
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("namespace creation reexec command failed: %v", err)
 	}
